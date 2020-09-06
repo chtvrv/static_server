@@ -1,0 +1,4 @@
+module libevent {
+  umbrella header "libevent.h"
+  link "event"
+}
