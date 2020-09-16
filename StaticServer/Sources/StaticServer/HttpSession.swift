@@ -17,14 +17,9 @@ protocol BufferEventSession {
   static var eventcb: bufferevent_event_cb { get }
 }
 
-struct HttpRequest {
-  let requestLine: String
-  let headers: [String: String]
-}
-
 struct HttpSession : BufferEventSession {
   var bev: BufferEvent
-  var request: HttpRequest?
+  var request: UnsafeMutablePointer<HttpRequest>?
   var timer: Timer
   
   init(eventBase: OpaquePointer!, socket: Int32, options: Int32, ptr: UnsafeMutablePointer<HttpSession>) {
@@ -45,35 +40,13 @@ struct HttpSession : BufferEventSession {
     }
   }
   
-  func getRequest() -> HttpRequest? {
+  func getRequest() -> UnsafeMutablePointer<HttpRequest>? {
     return request
   }
   
   func clean() {
     timer.free()
     bufferevent_free(bev)
-  }
-  
-  mutating func parseLinesToHttpRequest(lines: [UnsafeMutablePointer<Int8>]) {
-    if lines.isEmpty {
-      return
-    }
-    
-    let requestLine = String(cString: lines[0])
-    var headers = [String: String]()
-    
-    for i in 1..<lines.count {
-      let pair = String(cString: lines[i]).split(separator: ":")
-      let header = pair.first ?? ""
-      let value = pair.last ?? ""
-      headers[String(header)] = String(value)
-    }
-    
-    self.request = HttpRequest(requestLine: requestLine, headers: headers)
-    
-    lines.forEach {
-      free($0)
-    }
   }
 }
 
@@ -93,19 +66,27 @@ extension HttpSession {
       if line == nil {
         break
       }
-      
       lines.append(line!)
     }
     
-    var parser = ctx?.load(as: HttpSession.self)
-    parser?.parseLinesToHttpRequest(lines: lines)
-    let request = parser?.getRequest()
+    guard var parser = ctx?.load(as: HttpSession.self) else {
+      return
+    }
+    parser.request = HttpRequest.createRequestFromLinesArray(lines: lines)
+    guard var request = parser.getRequest() else {
+      return
+    }
     
+    guard let response = HttpResponse.GetResponseForRequest(req: request) else {
+      return
+    }
     
-    let string = String("HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 0\r\n\r\n")
+    guard let data = response.pointee.serialize() else {
+      return
+    }
     
-    _ = string.withCString { cstr in
-      evbuffer_add(output, cstr, string.lengthOfBytes(using: .ascii))
+    _ = data.pointee.withUnsafeBytes { buffer -> Int32 in
+     evbuffer_add(output, buffer.baseAddress!.assumingMemoryBound(to: UInt8.self),buffer.count)
     }
   }
 }
