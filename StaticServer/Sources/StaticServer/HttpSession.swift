@@ -28,8 +28,10 @@ struct HttpSession : BufferEventSession {
     evutil_make_socket_nonblocking(socket)
     bev = bufferevent_socket_new(eventBase, socket, options)
     bufferevent_socket_connect(bev, nil, 0)
-    bufferevent_setcb(bev, HttpSession.readcb, nil, HttpSession.eventcb, ptr)
+    bufferevent_setcb(bev, HttpSession.readcb, HttpSession.writecb, HttpSession.eventcb, ptr)
     bufferevent_enable(bev, Int16(EV_READ|EV_WRITE));
+    // таймеры на чтение
+    //bufferevent_set
   }
   
   static func clean(ptr: UnsafeMutablePointer<HttpSession>?) {
@@ -85,26 +87,37 @@ extension HttpSession {
       return
     }
     
-    _ = data.pointee.withUnsafeBytes { buffer -> Int32 in
+    _ = data.pointee.withUnsafeBytes { buffer in
      evbuffer_add(output, buffer.baseAddress!.assumingMemoryBound(to: UInt8.self),buffer.count)
     }
+    
+    response.deinitialize(count: 1)
+    response.deallocate()
+    
+    request.deinitialize(count: 1)
+    request.deallocate()
+    
+    data.deinitialize(count: 1)
+    data.deallocate()
   }
 }
 
 extension HttpSession {
-  static var writecb: bufferevent_data_cb = { (bev, ctx) in }
+  static var writecb: bufferevent_data_cb = { (bev, ctx) in
+    HttpSession.clean(ptr: ctx?.assumingMemoryBound(to: HttpSession.self))
+  }
 }
 
 extension HttpSession {
   static var eventcb: bufferevent_event_cb = { (bev, event, arg) in
     if event & Int16(BEV_EVENT_CONNECTED) != 0 {
       print("CONNECTED")
-      var parser = arg?.load(as: HttpSession.self)
-      parser?.timer.stop()
+      //var parser = arg?.load(as: HttpSession.self)
+      //parser?.timer.stop()
     } else if event & Int16(BEV_EVENT_EOF) != 0 {
       print("EOF")
-      var parser = arg?.load(as: HttpSession.self)
-      parser?.timer.start()
+      //var parser = arg?.load(as: HttpSession.self)
+      //parser?.timer.start()
     } else if event & Int16(BEV_EVENT_ERROR) != 0 {
       print("ERROR")
     } else if event & Int16(BEV_EVENT_TIMEOUT|BEV_EVENT_READING) != 0 {

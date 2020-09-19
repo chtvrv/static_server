@@ -28,14 +28,12 @@ enum Status: CustomStringConvertible {
 }
 
 struct HttpResponse {
-  let status: Status
+  var status: Status
   static let version = "HTTP/1.1"
   
   var headers = [
-    "Server" : "SwiftServer",
-    "Date" : "none",
-    "Content-Length" : "0",
-    "Connection" : "keep-alive"
+    "Server" : "SwiftStaticServer",
+    "Connection" : "closed"
   ]
 
   var body: Data?
@@ -70,18 +68,32 @@ struct HttpResponse {
 
 extension HttpResponse {
   static func GetResponseForRequest(req: UnsafeMutablePointer<HttpRequest>) -> UnsafeMutablePointer<HttpResponse>? {
-    let ptr = UnsafeMutablePointer<HttpResponse>.allocate(capacity: 1)
-    ptr.initialize(to: HttpResponse())
-    do {
-      // перенести на старт
-      let root_dir = ProcessInfo.processInfo.environment["STATIC_DIR"]!
-      let data = try Data(contentsOf: URL(fileURLWithPath: root_dir + req.pointee.resource), options: .mappedIfSafe)
-      print(data.count)
-      ptr.pointee.body = data
-      ptr.pointee.headers["Content-Length"] = String(data.count)
-    } catch let error {
-      print(error)
+    let response = UnsafeMutablePointer<HttpResponse>.allocate(capacity: 1)
+    response.initialize(to: HttpResponse())
+    
+    let RFC3339DateFormatter = DateFormatter()
+    RFC3339DateFormatter.locale = Locale(identifier: "en_US_POSIX")
+    RFC3339DateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+    RFC3339DateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+    
+    if req.pointee.method != .GET && req.pointee.method != .HEAD {
+      let date = Date()
+      response.pointee.headers["Date"] = RFC3339DateFormatter.string(from: date)
+      response.pointee.status = .MethodNotAllowed
+      return response
     }
-    return ptr
+    
+    let result = LookUpForResource(resource: req.pointee.resource, returnData: req.pointee.method == .GET)
+    
+    if result.1 == .OK {
+      response.pointee.headers["Content-Length"] = String(result.0?.size ?? 0)
+      response.pointee.headers["Content-Type"] = result.0?.mimetype.description
+      response.pointee.body = result.0?.data
+    } else {
+      response.pointee.status = result.1
+      response.pointee.headers["Content-Length"] = "0"
+    }
+    
+    return response
   }
 }

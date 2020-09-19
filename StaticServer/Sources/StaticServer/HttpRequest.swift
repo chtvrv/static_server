@@ -8,7 +8,7 @@
 import Foundation
 
 enum Method: String {
-  case GET, HEAD
+  case GET, HEAD, POST, PUT, DELETE, PATCH
 }
 
 struct HttpRequest {
@@ -31,7 +31,25 @@ struct HttpRequest {
     guard let method = Method.init(rawValue: parsed[0]) else {
       return nil
     }
-    let resource = parsed[1]
+    
+    guard let unescapedResource = parsed[1].removingPercentEncoding else {
+      return nil
+    }
+    
+    var last : Character? = nil
+    let escapedResource = unescapedResource.filter {
+      if last == nil {
+        last = $0
+        return true
+      }
+
+      if $0.isLetter || $0.isNumber || $0 != last {
+        last = $0
+        return true
+      }
+
+      return false
+    }
     
     var headers = [String: String]()
     
@@ -47,7 +65,7 @@ struct HttpRequest {
     }
     
     let ptr = UnsafeMutablePointer<HttpRequest>.allocate(capacity: 1)
-    ptr.initialize(to: HttpRequest(headers: headers, method: method, resource: resource))
+    ptr.initialize(to: HttpRequest(headers: headers, method: method, resource: escapedResource))
     return ptr
   }
 }

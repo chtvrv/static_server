@@ -8,7 +8,7 @@
 import Foundation
 
 func getSockAddr() -> sockaddr_in {
-  let port : UInt16 = 1222
+  let port : UInt16 = 80
   let ip_string : String = "localhost"
   
 #if os(macOS)
