@@ -83,7 +83,7 @@ extension HttpResponse {
       return response
     }
     
-    let result = LookUpForResource(resource: req.pointee.resource, returnData: req.pointee.method == .GET)
+    let result = FilesCache.shared.LookUpForFile(resource: req.pointee.resource, returnData: req.pointee.method == .GET)
     
     if result.1 == .OK {
       response.pointee.headers["Content-Length"] = String(result.0?.size ?? 0)

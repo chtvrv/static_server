@@ -5,6 +5,11 @@ class Server {
   func start() {
     print("Server starting...")
     
+    if !WorkQueue.shared.configureWorkers() {
+      perror("Couldn't create workers")
+      return
+    }
+    
     var sockAddress = getSockAddr()
     
     let listener = withUnsafePointer(to: &sockAddress) {
@@ -13,8 +18,8 @@ class Server {
       }
     }
     if listener == nil {
-      perror("Couldn't create listener");
-      return;
+      perror("Couldn't create listener")
+      return
     }
     
     evconnlistener_set_error_cb(listener, Server.accept_error_cb)
@@ -26,11 +31,14 @@ extension Server {
   static var accept_conn_cb: evconnlistener_cb = { (listener, socket, addr, len, ctx) in
     let parser = UnsafeMutablePointer<HttpSession>.allocate(capacity: 1)
     parser.initialize(to: HttpSession(
-      eventBase: EventLoop.shared.eventBase,
       socket: socket,
       options: Int32(BEV_OPT_CLOSE_ON_FREE.rawValue),
       ptr: parser)
     )
+    
+    let job = Job(function: dispatchJob, data: parser)
+    WorkQueue.shared.addJobToQueue(job: job)
+    
   }
   
   static var accept_error_cb: evconnlistener_errorcb = { (listener, ctx) in

@@ -21,6 +21,12 @@ struct HttpRequest {
       return nil
     }
     
+    defer {
+      lines.forEach {
+        free($0)
+      }
+    }
+    
     let requestLine = String(cString: lines[0])
     
     let parsed = requestLine.components(separatedBy: " ")
@@ -32,23 +38,16 @@ struct HttpRequest {
       return nil
     }
     
-    guard let unescapedResource = parsed[1].removingPercentEncoding else {
+    guard let unescapedURI = parsed[1].removingPercentEncoding else {
       return nil
     }
     
-    var last : Character? = nil
-    let escapedResource = unescapedResource.filter {
-      if last == nil {
-        last = $0
-        return true
-      }
-
-      if $0.isLetter || $0.isNumber || $0 != last {
-        last = $0
-        return true
-      }
-
-      return false
+    let escapedURI = unescapedURI.replacingOccurrences(of: "/../", with: "")
+    let resource: String
+    if let unquery = escapedURI.split(separator: "?").first {
+      resource = String(unquery)
+    } else {
+      resource = ""
     }
     
     var headers = [String: String]()
@@ -60,12 +59,8 @@ struct HttpRequest {
       headers[String(header)] = String(value)
     }
     
-    lines.forEach {
-      free($0)
-    }
-    
     let ptr = UnsafeMutablePointer<HttpRequest>.allocate(capacity: 1)
-    ptr.initialize(to: HttpRequest(headers: headers, method: method, resource: escapedResource))
+    ptr.initialize(to: HttpRequest(headers: headers, method: method, resource: resource))
     return ptr
   }
 }

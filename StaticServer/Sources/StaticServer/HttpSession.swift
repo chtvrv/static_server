@@ -21,9 +21,13 @@ struct HttpSession : BufferEventSession {
   var bev: BufferEvent
   var request: UnsafeMutablePointer<HttpRequest>?
   var timer: Timer
+  var eventBase: OpaquePointer!
+  var socket: Int32
   
-  init(eventBase: OpaquePointer!, socket: Int32, options: Int32, ptr: UnsafeMutablePointer<HttpSession>) {
+  init(socket: Int32, options: Int32, ptr: UnsafeMutablePointer<HttpSession>) {
+    self.eventBase = event_base_new()
     self.timer = Timer(fd: socket, ctx: ptr, timeout: timeval(tv_sec: 5, tv_usec: 0))
+    self.socket = socket
     
     evutil_make_socket_nonblocking(socket)
     bev = bufferevent_socket_new(eventBase, socket, options)
@@ -49,6 +53,7 @@ struct HttpSession : BufferEventSession {
   func clean() {
     timer.free()
     bufferevent_free(bev)
+    event_base_free(eventBase)
   }
 }
 
@@ -74,6 +79,7 @@ extension HttpSession {
     guard var parser = ctx?.load(as: HttpSession.self) else {
       return
     }
+    
     parser.request = HttpRequest.createRequestFromLinesArray(lines: lines)
     guard var request = parser.getRequest() else {
       return
@@ -104,7 +110,9 @@ extension HttpSession {
 
 extension HttpSession {
   static var writecb: bufferevent_data_cb = { (bev, ctx) in
-    HttpSession.clean(ptr: ctx?.assumingMemoryBound(to: HttpSession.self))
+    if let ptr = ctx?.assumingMemoryBound(to: HttpSession.self) {
+      event_base_loopexit(ptr.pointee.eventBase, nil)
+    }
   }
 }
 
@@ -119,6 +127,7 @@ extension HttpSession {
       //var parser = arg?.load(as: HttpSession.self)
       //parser?.timer.start()
     } else if event & Int16(BEV_EVENT_ERROR) != 0 {
+      
       print("ERROR")
     } else if event & Int16(BEV_EVENT_TIMEOUT|BEV_EVENT_READING) != 0 {
       print("TIMEOUT")
