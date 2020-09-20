@@ -8,18 +8,31 @@
 import Foundation
 
 struct Worker {
+#if os(macOS)
   var thread: pthread_t? = nil
+#else
+  var thread = pthread_t()
+#endif
   var terminate = 0
   weak var workqueue: WorkQueue?
 }
 
+#if os(macOS)
+typealias workerPtr = UnsafeMutableRawPointer
+#else
+typealias workerPtr = UnsafeMutableRawPointer?
+#endif
 
-func workerEntryPoint(ctx: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer? {
+
+func workerEntryPoint(ctx: workerPtr) -> UnsafeMutableRawPointer? {
   defer {
     pthread_exit(nil);
   }
-  
+#if os(macOS)
   let workerPtr = ctx.assumingMemoryBound(to: Worker.self)
+#else
+  let workerPtr = ctx!.assumingMemoryBound(to: Worker.self)
+#endif
   
   while true {
     pthread_mutex_lock(&workerPtr.pointee.workqueue!.jobsMutex)
@@ -44,7 +57,6 @@ func workerEntryPoint(ctx: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer? 
     pthread_mutex_unlock(&workerPtr.pointee.workqueue!.jobsMutex)
     if let jobNode = jobNode {
       jobNode.value.function(jobNode.value)
-      // очистить job
     }
   }
   
