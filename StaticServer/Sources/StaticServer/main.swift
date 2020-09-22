@@ -25,6 +25,13 @@ class Server {
     evconnlistener_set_error_cb(listener, Server.accept_error_cb)
     EventLoop.shared.run()
   }
+  
+  func shutdown() {
+    print("Shutdown listener");
+    EventLoop.shared.shutdown()
+    print("Stopping workers");
+    WorkQueue.shared.shutdown()
+  }
 }
 
 extension Server {
@@ -50,4 +57,10 @@ extension Server {
 }
 
 var server = Server()
+
+Signals.trap(signal: .int) { signal in
+  server.shutdown()
+}
+
 server.start()
+

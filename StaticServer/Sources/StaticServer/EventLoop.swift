@@ -25,4 +25,10 @@ class EventLoop {
       return
     }
   }
+  
+  func shutdown() {
+    if event_base_loopexit(self.eventBase, nil) != 0 {
+      print("Error shutting down loop")
+    }
+  }
 }

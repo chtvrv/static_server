@@ -62,6 +62,5 @@ func workerEntryPoint(ctx: workerPtr) -> UnsafeMutableRawPointer? {
   
   workerPtr.deinitialize(count: 1)
   workerPtr.deallocate()
-  
-  return nil
+  pthread_exit(nil)
 }
